@@ -2,9 +2,8 @@ name: Backup semanal SmartPlantão
 
 on:
   schedule:
-    # Toda segunda-feira às 03:00 UTC = 00:00 em Brasília (domingo → segunda)
     - cron: '0 3 * * 1'
-  workflow_dispatch: {}  # permite disparar manualmente pelo painel do GitHub
+  workflow_dispatch: {}
 
 jobs:
   backup:
@@ -20,11 +19,10 @@ jobs:
           wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
-          # Remove older clients para o pg_wrapper selecionar o v17
-          sudo apt-get remove -y postgresql-client-16 postgresql-client-14 postgresql-client-common-* || true
-          # Garante PATH priorizando binários da v17
+          sudo apt-get remove -y postgresql-client-16 postgresql-client-14 || true
           echo "/usr/lib/postgresql/17/bin" >> $GITHUB_PATH
-          /usr/lib/postgresql/17/bin/pg_dump --version
+          ls /usr/lib/postgresql/17/bin || true
+          /usr/lib/postgresql/17/bin/pg_dump --version || pg_dump --version
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -39,7 +37,10 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: python scripts/backup.py
+        run: |
+          export PATH="/usr/lib/postgresql/17/bin:$PATH"
+          pg_dump --version
+          python scripts/backup.py
 
       - name: Comprimir backup
         run: |
