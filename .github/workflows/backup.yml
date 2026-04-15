@@ -1,0 +1,57 @@
+name: Backup semanal SmartPlantão
+
+on:
+  schedule:
+    # Toda segunda-feira às 03:00 UTC = 00:00 em Brasília (domingo → segunda)
+    - cron: '0 3 * * 1'
+  workflow_dispatch: {}  # permite disparar manualmente pelo painel do GitHub
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Instalar client PostgreSQL 16
+        run: |
+          sudo sh -c 'echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-16
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependências Python
+        run: pip install requests
+
+      - name: Executar backup
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python scripts/backup.py
+
+      - name: Comprimir backup
+        run: |
+          TS=$(date -u +"%Y-%m-%d_%H%M")
+          tar czf smartplantao-backup-${TS}.tar.gz backup_*
+          ls -lh smartplantao-backup-*.tar.gz
+
+      - name: Publicar artifact (retenção 90 dias)
+        uses: actions/upload-artifact@v4
+        with:
+          name: smartplantao-backup-${{ github.run_number }}
+          path: smartplantao-backup-*.tar.gz
+          retention-days: 90
+
+      - name: Resumo
+        if: always()
+        run: |
+          echo "### Backup finalizado" >> $GITHUB_STEP_SUMMARY
+          echo "Artifact disponível em Actions > este run > Artifacts." >> $GITHUB_STEP_SUMMARY
+          echo "Retenção: 90 dias." >> $GITHUB_STEP_SUMMARY
